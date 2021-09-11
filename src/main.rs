@@ -6,6 +6,7 @@ use std::path;
 #[derive(Debug)]
 struct Database {
     data: HashMap<String, String>,
+    flush: bool,
 }
 
 impl Database {
@@ -17,23 +18,37 @@ impl Database {
                 let (key, value) = line.split_once('\t').expect("Corrupt database");
                 data.insert(key.to_owned(), value.to_owned());
             }
-            return Ok(Database { data })
+            return Ok(Database { data, flush: false });
         }
-        Ok(Database { data: HashMap::<String, String>::new() })
+        Ok(Database {
+            data: HashMap::new(),
+            flush: false,
+        })
     }
 
     fn insert(&mut self, key: &str, value: &str) {
         self.data.insert(key.to_lowercase(), value.to_lowercase());
     }
 
-    fn flush(self) -> std::io::Result<()> {
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.flush = true;
         let mut contents = String::new();
-        for (k, v) in self.data {
-            contents.push_str(format!("{}\t{}\n", k, v).as_str());
+        for (k, v) in &self.data {
+            contents.push_str(k);
+            contents.push('\t');
+            contents.push_str(v);
+            contents.push('\n');
         }
         fs::write("kv.db", contents)
     }
+}
 
+impl Drop for Database {
+    fn drop(&mut self) {
+        if !self.flush {
+            self.flush().expect("error writing database");
+        }
+    }
 }
 
 fn main() {
@@ -42,5 +57,6 @@ fn main() {
     let value = args.next().expect("missing value");
     let mut database = Database::new().expect("Database::new() crashed");
     database.insert(&key, &value);
-    database.flush().expect("error writing database");
+    // database.flush().expect("error writing database");
+    // database.insert("hello", "world");
 }
